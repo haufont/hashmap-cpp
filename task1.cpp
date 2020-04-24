@@ -10,37 +10,41 @@ class HashMap {
  private:
     typedef std::pair<const KeyType, ValueType> MapType;
     typedef std::list<MapType> ListType;
+    typedef std::list<typename ListType::iterator> ItList;
 
-    ListType list_for_iterator;
-    std::vector<std::list<typename ListType::iterator>> backets;
-    Hash main_hash_func = Hash();
-    size_t size_map;
+    ListType ListForIterator;
+    std::vector<ItList> Buckets;
+    Hash hasher;
+    size_t current_size;
 
-    constexpr static size_t start_size_backet = 2;
+    constexpr static size_t START_SIZE_BUCKET = 2;
+    constexpr static size_t MAX_AVERAGE_SIZE_BUCKET = 4;
+    constexpr static size_t MULTIPLIER_NEW_NUMBER_BUCKETS = 4;
 
-    size_t backet_number(const MapType& in) const {
-        return main_hash_func(in.first) % backets.size();
+    size_t bucket_number(const MapType& in) const {
+        return hasher(in.first) % Buckets.size();
     }
 
-    size_t backet_number(const KeyType& in) const {
-        return main_hash_func(in) % backets.size();
+    size_t bucket_number(const KeyType& in) const {
+        return hasher(in) % Buckets.size();
     }
 
     typename ListType::iterator insert_without_find(const MapType& in) {
-        list_for_iterator.push_back(in);
-        ++size_map;
-        if (size_map >= 4 * backets.size())
-            rebuild_map(4 * backets.size());
-        backets[backet_number(in)].push_back(--list_for_iterator.end());
-        return --list_for_iterator.end();
+        ListForIterator.push_back(in);
+        ++current_size;
+        if (current_size >= MAX_AVERAGE_SIZE_BUCKET * Buckets.size()) {
+            rebuild_map(MULTIPLIER_NEW_NUMBER_BUCKETS * Buckets.size());
+        }
+        Buckets[bucket_number(in)].push_back(prev(ListForIterator.end()));
+        return prev(ListForIterator.end());
     }
 
-    void rebuild_map(size_t new_size_backet) {
-        auto copy_list = list_for_iterator;
-        backets.clear();
-        backets.resize(new_size_backet);
-        list_for_iterator.clear();
-        size_map = 0;
+    void rebuild_map(size_t new_size_bucket) {
+        ListType copy_list = ListForIterator;
+        Buckets.clear();
+        Buckets.resize(new_size_bucket);
+        ListForIterator.clear();
+        current_size = 0;
         for (const auto& it : copy_list) {
             insert(it);
         }
@@ -51,37 +55,37 @@ class HashMap {
     using iterator = typename ListType::iterator;
     using const_iterator = typename ListType::const_iterator;
 
-    HashMap(const Hash& Hash_func = Hash()) : 
-        main_hash_func(Hash_func), size_map(0) {
-        rebuild_map(start_size_backet);
+    HashMap(const Hash& hash_ctor = Hash()) : 
+        hasher(hash_ctor), current_size(0) {
+        rebuild_map(START_SIZE_BUCKET);
     }
 
     template<class It>
-    HashMap(It it_begin, It it_end, const Hash& Hash_func = Hash()) : 
-        main_hash_func(Hash_func), size_map(0) {
-        rebuild_map(start_size_backet);
-        for (;it_begin != it_end; ++it_begin) {
+    HashMap(It it_begin, It it_end, const Hash& hash_ctor = Hash()) : 
+        hasher(hash_ctor), current_size(0) {
+        rebuild_map(START_SIZE_BUCKET);
+        for (; it_begin != it_end; ++it_begin) {
             insert(*it_begin);
         }
     }
 
     HashMap(const std::initializer_list<MapType>& in, 
-            const Hash& Hash_func = Hash()) : 
-        main_hash_func(Hash_func), size_map(0) {
-        rebuild_map(start_size_backet);
+            const Hash& hash_ctor = Hash()) : 
+        hasher(hash_ctor), current_size(0) {
+        rebuild_map(START_SIZE_BUCKET);
         for (const auto& item : in) {
             insert(item);
         }
     }
 
     HashMap& operator=(const HashMap& other) {
-        if(this == &other) {
+        if (this == &other) {
             return (*this);
         }
-        main_hash_func = other.hash_function();
-        list_for_iterator.clear();
-        size_map = 0;
-        rebuild_map(other.backets.size());
+        hasher = other.hash_function();
+        ListForIterator.clear();
+        current_size = 0;
+        rebuild_map(other.Buckets.size());
         for (const auto& it : other) {
             insert_without_find(it);
         }
@@ -89,15 +93,15 @@ class HashMap {
     }
 
     size_t size() const {
-        return size_map;
+        return current_size;
     }
 
     bool empty() const {
-        return size_map == 0;
+        return current_size == 0;
     }
 
     const Hash& hash_function() const {
-        return main_hash_func;
+        return hasher;
     }
 
     void insert(const MapType& in) {
@@ -107,40 +111,40 @@ class HashMap {
 
     void erase(const KeyType& in) {
         iterator it_element = find(in);
-        size_t id = backet_number(in);
+        size_t id = bucket_number(in);
         if (it_element != end()) {
-            for (auto it_list = backets[id].begin();
-                it_list != backets[id].end(); ++it_list) {
+            for (auto it_list = Buckets[id].begin();
+                it_list != Buckets[id].end(); ++it_list) {
                 if ((*it_list) == it_element) {
-                    backets[id].erase(it_list);
+                    Buckets[id].erase(it_list);
                     break;
                 }
             }
-            list_for_iterator.erase(it_element);
-            --size_map;
+            ListForIterator.erase(it_element);
+            --current_size;
         }
     }
 
     iterator begin() {
-        return list_for_iterator.begin();
+        return ListForIterator.begin();
     }
 
     const_iterator begin() const {
-        return list_for_iterator.cbegin();
+        return ListForIterator.cbegin();
     }
 
     iterator end() {
-        return list_for_iterator.end();
+        return ListForIterator.end();
     }
 
     const_iterator end() const {
-        return list_for_iterator.cend();
+        return ListForIterator.cend();
     }
 
     iterator find(const KeyType& in) {
-        size_t id = backet_number(in);
-        iterator out_it = list_for_iterator.end();
-        for (auto it : backets[id]) {
+        size_t id = bucket_number(in);
+        iterator out_it = ListForIterator.end();
+        for (auto it : Buckets[id]) {
             if (it->first == in) {
                 out_it = it;
             }
@@ -149,9 +153,9 @@ class HashMap {
     }
 
     const_iterator find(const KeyType& in) const {
-        size_t id = backet_number(in);
-        const_iterator out_it = list_for_iterator.cend();
-        for (auto it : backets[id]) {
+        size_t id = bucket_number(in);
+        const_iterator out_it = ListForIterator.cend();
+        for (auto it : Buckets[id]) {
             if (it->first == in) {
                 out_it = it;
             }
@@ -161,7 +165,7 @@ class HashMap {
 
     ValueType& operator[](const KeyType& in) {
         iterator it = find(in);
-        if (it == list_for_iterator.end())
+        if (it == ListForIterator.end())
             return insert_without_find({in, ValueType()})->second;
         return it->second;
     }
@@ -175,8 +179,8 @@ class HashMap {
     }
 
     void clear() {
-        list_for_iterator.clear();
-        size_map = 0;
-        rebuild_map(start_size_backet);
+        ListForIterator.clear();
+        current_size = 0;
+        rebuild_map(START_SIZE_BUCKET);
     }
 };
